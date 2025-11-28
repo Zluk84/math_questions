@@ -1,6 +1,6 @@
 import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 from config.settings import Config
 from database.models import MathProblemsDB
 
@@ -34,7 +34,11 @@ async def sections(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sections_data = db.get_all_sections()
 
     if not sections_data:
-        await update.message.reply_text("❌ Разделы с задачами не найдены.")
+        error_text = "❌ Разделы с задачами не найдены."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(error_text)
+        else:
+            await update.message.reply_text(error_text)
         return
 
     keyboard = []
@@ -49,6 +53,10 @@ async def sections(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("🎲 Случайная задача",
                              callback_data="random_problem"),
         InlineKeyboardButton("🔍 Поиск задач", callback_data="search")
+    ])
+
+    keyboard.append([
+        InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")
     ])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -70,11 +78,32 @@ async def show_section_problems(update: Update,
                                 section_id: int):
     """Показывает задачи в выбранном разделе"""
     problems = db.get_problems_by_section(section_id)
-    section_name = db.get_section_name(section_id)
+
+    # Получаем название раздела из первого элемента (если есть задачи)
+    section_name = "Неизвестный раздел"
+    if problems:
+        # Берем название раздела из первой задачи
+        _, _, _, section_name_from_problem = problems[0]
+        section_name = section_name_from_problem
+    else:
+        # Если задач нет, пытаемся получить название раздела из списка разделов
+        sections_data = db.get_all_sections()
+        for section in sections_data:
+            if section[0] == section_id:
+                section_name = section[1]
+                break
 
     if not problems:
+        keyboard = [
+            [InlineKeyboardButton("🔙 Назад к разделам",
+                                  callback_data="sections")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.callback_query.edit_message_text(
-            "❌ В этом разделе нет задач.")
+            f"❌ В разделе '{section_name}' нет задач.",
+            reply_markup=reply_markup
+        )
         return
 
     keyboard = []
@@ -94,6 +123,10 @@ async def show_section_problems(update: Update,
                              callback_data="random_problem")
     ])
 
+    keyboard.append([
+        InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")
+    ])
+
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     text = f"📂 **Раздел: {section_name}**\n\n"
@@ -110,7 +143,16 @@ async def show_problem(update: Update, context: ContextTypes.DEFAULT_TYPE,
     problem = db.get_problem_by_number(problem_number)
 
     if not problem:
-        await update.callback_query.edit_message_text("❌ Задача не найдена.")
+        keyboard = [
+            [InlineKeyboardButton("🔙 Назад к разделам",
+                                  callback_data="sections")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.callback_query.edit_message_text(
+            "❌ Задача не найдена.",
+            reply_markup=reply_markup
+        )
         return
 
     problem_number, problem_text, correct_answer, section_name = problem
@@ -127,7 +169,8 @@ async def show_problem(update: Update, context: ContextTypes.DEFAULT_TYPE,
             InlineKeyboardButton("📂 К разделам", callback_data="sections"),
             InlineKeyboardButton("🎲 Случайная задача",
                                  callback_data="random_problem")
-        ]
+        ],
+        [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -141,10 +184,19 @@ async def random_problem(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not problem:
         error_text = "❌ Не удалось найти задачу. База данных пуста."
+        keyboard = [
+            [InlineKeyboardButton("🏠 Главное меню",
+                                  callback_data="main_menu")],
+            [InlineKeyboardButton("📂 Все разделы", callback_data="sections")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         if update.callback_query:
-            await update.callback_query.edit_message_text(error_text)
+            await update.callback_query.edit_message_text(error_text,
+                                                          reply_markup=reply_markup)
         else:
-            await update.message.reply_text(error_text)
+            await update.message.reply_text(error_text,
+                                            reply_markup=reply_markup)
         return Config.WAITING_FOR_RANDOM_ANSWER
 
     problem_number, problem_text, correct_answer, section_name = problem
@@ -163,7 +215,8 @@ async def random_problem(update: Update, context: ContextTypes.DEFAULT_TYPE):
                               callback_data=f"show_answer_{problem_number}")],
         [InlineKeyboardButton("🎲 Другая случайная задача",
                               callback_data="random_problem")],
-        [InlineKeyboardButton("📂 Все разделы", callback_data="sections")]
+        [InlineKeyboardButton("📂 Все разделы", callback_data="sections")],
+        [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -183,8 +236,16 @@ async def handle_random_answer(update: Update,
     problem = context.user_data.get('current_problem')
 
     if not problem:
+        keyboard = [
+            [InlineKeyboardButton("🎲 Новая случайная задача",
+                                  callback_data="random_problem")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "❌ Ошибка: задача не найдена. Попробуйте получить новую задачу.")
+            "❌ Ошибка: задача не найдена. Попробуйте получить новую задачу.",
+            reply_markup=reply_markup
+        )
         return ConversationHandler.END
 
     problem_number, problem_text, correct_answer, section_name = problem
@@ -228,7 +289,8 @@ async def handle_random_answer(update: Update,
             [InlineKeyboardButton("🎲 Новая случайная задача",
                                   callback_data="random_problem")],
             [InlineKeyboardButton("📂 Все разделы", callback_data="sections")],
-            [InlineKeyboardButton("📊 Моя статистика", callback_data="stats")]
+            [InlineKeyboardButton("📊 Моя статистика", callback_data="stats")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -257,7 +319,8 @@ async def handle_random_answer(update: Update,
                                   callback_data=f"show_answer_{problem_number}")],
             [InlineKeyboardButton("🎲 Другая случайная задача",
                                   callback_data="random_problem")],
-            [InlineKeyboardButton("📂 Все разделы", callback_data="sections")]
+            [InlineKeyboardButton("📂 Все разделы", callback_data="sections")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)

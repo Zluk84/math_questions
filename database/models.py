@@ -1,56 +1,79 @@
 import sqlite3
 import logging
-from pathlib import Path
-from datetime import datetime
+from typing import List, Tuple, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
 
 class MathProblemsDB:
-    def __init__(self, db_path='math_problems.db'):
+    def __init__(self, db_path: str = "math_problems.db"):
         self.db_path = db_path
-        self.create_tables()
-        self.init_user_stats_table()
-        self.init_user_attempts_table()
-        self.update_database_schema()
+        self._create_tables()
 
-    def create_tables(self):
-        """Создает основные таблицы для задач и разделов"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+    def _create_tables(self):
+        """Создает таблицы, если они не существуют"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
 
-        # Таблица разделов
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS sections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name VARCHAR(100) NOT NULL,
-                description TEXT
-            )
-        ''')
+            # Таблица разделов
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS sections (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                )
+            ''')
 
-        # Таблица задач
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS problems (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                section_id INTEGER,
-                problem_number INTEGER NOT NULL,
-                problem_text TEXT NOT NULL,
-                answer TEXT NOT NULL,
-                difficulty_level VARCHAR(20) DEFAULT 'средняя',
-                FOREIGN KEY (section_id) REFERENCES sections(id),
-                UNIQUE(section_id, problem_number)
-            )
-        ''')
+            # Таблица задач
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS problems (
+                    number TEXT PRIMARY KEY,
+                    problem_text TEXT NOT NULL,
+                    correct_answer TEXT NOT NULL,
+                    section_id INTEGER,
+                    FOREIGN KEY (section_id) REFERENCES sections (id)
+                )
+            ''')
 
-        # Создаем индексы для быстрого поиска
-        cursor.execute(
-            'CREATE INDEX IF NOT EXISTS idx_problem_number ON problems(problem_number)')
-        cursor.execute(
-            'CREATE INDEX IF NOT EXISTS idx_section_id ON problems(section_id)')
+            # Таблица попыток пользователей
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    problem_number TEXT NOT NULL,
+                    user_answer TEXT NOT NULL,
+                    correct_answer TEXT NOT NULL,
+                    is_correct BOOLEAN NOT NULL,
+                    solved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (problem_number) REFERENCES problems (number)
+                )
+            ''')
 
-        conn.commit()
-        conn.close()
-        logger.info("Основные таблицы созданы успешно")
+            # Таблица статистики пользователей
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_stats (
+                    user_id INTEGER PRIMARY KEY,
+                    username TEXT,
+                    first_name TEXT,
+                    last_name TEXT,
+                    total_attempts INTEGER DEFAULT 0,
+                    correct_attempts INTEGER DEFAULT 0,
+                    success_rate REAL DEFAULT 0,
+                    last_active DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            conn.commit()
+
+    def get_section_name(self, section_id: int) -> str:
+        """Возвращает название раздела по ID"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT name FROM sections WHERE id = ?',
+                           (section_id,))
+            result = cursor.fetchone()
+            return result[0] if result else "Неизвестный раздел"
+
+    # ... остальные методы класса остаются без изменений ...
 
     def init_user_stats_table(self):
         """Инициализирует таблицу статистики пользователей"""
