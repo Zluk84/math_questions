@@ -218,14 +218,12 @@ async def show_section_problems(update: Update,
     """Показывает задачи в выбранном разделе"""
     problems = db.get_problems_by_section(section_id)
 
-    # Получаем название раздела из первого элемента (если есть задачи)
+    # Получаем название раздела
     section_name = "Неизвестный раздел"
     if problems:
-        # Берем название раздела из первой задачи
         _, _, _, section_name_from_problem = problems[0]
         section_name = section_name_from_problem
     else:
-        # Если задач нет, пытаемся получить название раздела из списка разделов
         sections_data = db.get_all_sections()
         for section in sections_data:
             if section[0] == section_id:
@@ -248,10 +246,15 @@ async def show_section_problems(update: Update,
     keyboard = []
     for problem in problems:
         problem_number, problem_text, correct_answer, _ = problem
+
+        # 🔧 ИСПРАВЛЕНИЕ: приведение типов
+        problem_text = str(problem_text)
+
         # Обрезаем длинный текст задачи для кнопки
         button_text = f"Задача {problem_number}"
         if len(problem_text) > 30:
             button_text = f"Задача {problem_number}: {problem_text[:30]}..."
+
         keyboard.append([InlineKeyboardButton(button_text,
                                               callback_data=f"problem_{problem_number}")])
 
@@ -474,10 +477,8 @@ async def handle_random_answer(update: Update,
                                       callback_data=f"show_answer_{problem_number}")],
                 [InlineKeyboardButton("🎲 Другая случайная задача",
                                       callback_data="random_problem")],
-                [InlineKeyboardButton("📂 Все разделы",
-                                      callback_data="sections")],
-                [InlineKeyboardButton("🏠 Главное меню",
-                                      callback_data="main_menu")]
+                [InlineKeyboardButton("📂 Все разделы", callback_data="sections")],
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
             ]
 
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -506,12 +507,9 @@ async def handle_random_answer(update: Update,
             keyboard = [
                 [InlineKeyboardButton("🎲 Новая случайная задача",
                                       callback_data="random_problem")],
-                [InlineKeyboardButton("📂 Все разделы",
-                                      callback_data="sections")],
-                [InlineKeyboardButton("📊 Моя статистика",
-                                      callback_data="stats")],
-                [InlineKeyboardButton("🏠 Главное меню",
-                                      callback_data="main_menu")]
+                [InlineKeyboardButton("📂 Все разделы", callback_data="sections")],
+                [InlineKeyboardButton("📊 Моя статистика", callback_data="stats")],
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
             ]
 
             reply_markup = InlineKeyboardMarkup(keyboard)
