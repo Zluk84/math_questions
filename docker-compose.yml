@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  mathbot:
+    build: .
+    container_name: math_questions_bot
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      ADMIN_ID: ${ADMIN_ID}
+    volumes:
+      - ./math_problems.db:/app/math_problems.db
